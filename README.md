@@ -1,2 +1,3 @@
 # soft-doc-patterns
-Repository for Software Documentation and Patterns cource labs 
+Repository for Software Documentation and Patterns course labs 
+Student: Zaplatynsky Igor
