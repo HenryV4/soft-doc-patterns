@@ -1,38 +1,104 @@
+
 import "reflect-metadata";
+import express from "express";
+import multer from "multer";
 import path from "path";
+import fs from "fs";
+import swaggerUi from "swagger-ui-express";
 import { configureDependencies, container } from "./config/container";
 import { IDataImportService } from "./bll/interfaces/IDataImportService";
 
-async function run() {
-  try {
-    console.log("-----------------------------------------");
-    console.log("TAXI SERVICE DATA IMPORT STARTING...");
-    console.log("-----------------------------------------");
+const app = express();
+const port = 3000;
+const upload = multer({ dest: "uploads/" });
 
-    // 1. Налаштовуємо DI та підключаємо базу
+const swaggerDocument = {
+  openapi: "3.0.0",
+  info: {
+    title: "Taxi Service API",
+    version: "1.0.0",
+    description: "Система наповнення та керування базою даних таксі"
+  },
+  paths: {
+    "/api/import": {
+      post: {
+        summary: "Ручне наповнення (завантажити CSV)",
+        tags: ["Import"],
+        requestBody: {
+          content: {
+            "multipart/form-data": {
+              schema: { type: "object", properties: { file: { type: "string", format: "binary" } } }
+            }
+          }
+        },
+        responses: { 200: { description: "Успішно" }, 500: { description: "Помилка" } }
+      }
+    },
+    "/api/import-static": {
+      post: {
+        summary: "Автоматичне наповнення (з локального taxi_data.csv)",
+        tags: ["Import"],
+        responses: { 200: { description: "База наповнена 1000+ записами" } }
+      }
+    },
+    "/api/clean": {
+      post: {
+        summary: "Очистити базу (Maintenance)",
+        tags: ["Maintenance"],
+        responses: { 200: { description: "База очищена" } }
+      }
+    }
+  }
+};
+
+async function startServer() {
+  try {
     await configureDependencies();
 
-    // 2. Отримуємо сервіс імпорту з контейнера
-    const importService = container.resolve<IDataImportService>("IDataImportService");
+    app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-    // 3. Визначаємо шлях до твого згенерованого файлу
-    const csvPath = path.join(process.cwd(), "data", "taxi_data.csv");
+    // 1. Ручний імпорт через файл
+    app.post("/api/import", upload.single("file"), async (req, res) => {
+      try {
+        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        const importService = container.resolve<IDataImportService>("IDataImportService");
+        await importService.importTaxiData(req.file.path);
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        res.status(200).json({ message: "SUCCESS: Manual import completed" });
+      } catch (error) {
+        res.status(500).json({ error: "Manual import failed" });
+      }
+    });
 
-    // 4. Запускаємо основну логіку
-    console.log(`Starting to process file: ${csvPath}`);
-    await importService.importTaxiData(csvPath);
+    // 2. Автоматичне наповнення
+    app.post("/api/import-static", async (req, res) => {
+      try {
+        const importService = container.resolve<IDataImportService>("IDataImportService");
+        const csvPath = path.join(process.cwd(), "data", "taxi_data.csv");
+        await importService.importTaxiData(csvPath);
+        res.status(200).json({ message: "SUCCESS: 1000+ rows imported" });
+      } catch (error) {
+        res.status(500).json({ error: "Static import failed" });
+      }
+    });
 
-    console.log("-----------------------------------------");
-    console.log("SUCCESS: 1000+ ROWS IMPORTED TO SQLITE");
-    console.log("-----------------------------------------");
-    
-    // Виходимо з процесу після завершення
-    process.exit(0);
+    // 3. Очищення
+    app.post("/api/clean", async (req, res) => {
+      try {
+        const importService = container.resolve<IDataImportService>("IDataImportService");
+        await (importService as any).clearDatabase();
+        res.status(200).json({ message: "SUCCESS: Database cleared" });
+      } catch (error) {
+        res.status(500).json({ error: "Cleanup failed" });
+      }
+    });
+
+    app.listen(port, () => {
+      console.log(`🚀 SWAGGER LIVE: http://localhost:${port}/api-docs`);
+    });
   } catch (error) {
-    console.error("CRITICAL ERROR DURING IMPORT:");
-    console.error(error);
-    process.exit(1);
+    console.error("Failed to start server:", error);
   }
 }
 
-run();
+startServer();

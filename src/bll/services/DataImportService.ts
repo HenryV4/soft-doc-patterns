@@ -1,3 +1,4 @@
+
 import { injectable, inject } from 'tsyringe';
 import { IDataImportService } from '../interfaces/IDataImportService';
 import { ICsvReader } from '../../dal/interfaces/ICsvReader';
@@ -18,6 +19,30 @@ export class DataImportService implements IDataImportService {
     @inject('IRouteRepository') private routeRepository: IRouteRepository,
     @inject('IReviewRepository') private reviewRepository: IReviewRepository
   ) {}
+
+  // Метод для очищення через репозиторії
+  async clearDatabase(): Promise<void> {
+    console.log('Cleaning database tables...');
+    const repos = [
+      this.reviewRepository,
+      this.orderRepository,
+      this.routeRepository,
+      this.driverRepository,
+      this.customerRepository,
+      this.carRepository
+    ];
+
+    for (const repo of repos) {
+      try {
+        // Використовуємо .repository.delete({}), щоб не залежати від методів інтерфейсу
+        const actualRepo = (repo as any).repository || repo;
+        await actualRepo.delete({});
+      } catch (err) {
+        console.warn(`Could not clear a table, skipping...`);
+      }
+    }
+    console.log('Database cleared.');
+  }
 
   async importTaxiData(filePath: string): Promise<void> {
     console.log('Reading CSV file...');
@@ -72,7 +97,6 @@ export class DataImportService implements IDataImportService {
           driverRating: parseFloat((Math.random() * (5 - 4) + 4).toFixed(1))
         });
 
-        // Прив'язуємо об'єкт машини прямо тут
         const car = carsMap.get(row.carPlate);
         if (car) {
           driver.car = car;
@@ -100,7 +124,6 @@ export class DataImportService implements IDataImportService {
     console.log('Saving Drivers with Car relations...');
     const savedDrivers = await this.driverRepository.saveMany(driversToSave);
 
-    // Створення мап для замовлень
     const customerIdMap = new Map(savedCustomers.map(c => [c.phoneNumber, c]));
     const driverIdMap = new Map(savedDrivers.map(d => [d.driverLicense, d]));
 
