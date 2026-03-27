@@ -1,0 +1,4 @@
+{
+  "outputType": "redis",
+  "datasetPath": "data.csv"
+}

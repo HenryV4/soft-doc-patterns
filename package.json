@@ -1,0 +1,10 @@
+{
+  "devDependencies": {
+    "@types/node": "^25.5.0"
+  },
+  "dependencies": {
+    "csv-parse": "^6.2.1",
+    "kafkajs": "^2.2.4",
+    "redis": "^5.11.0"
+  }
+}
